@@ -110,6 +110,27 @@ bundle patch 已给好默认值；需要时可以按 id 覆盖：
 - 两个 peer 都标了 `optional`：它们只用于版本门禁，本插件不 `import` 任何 DSH 包，只通过 Cordis 服务取能力，所以不需要 pnpm 再把运行时包拉进 profile。
 - 没有自动更新：升级 = 重新安装新版本。
 
+## 发布（维护者）
+
+流水线在 `.github/workflows/`：
+
+- `ci.yml` —— push / PR 跑 `npm test`（Node 22 与 24）和 `npm pack --dry-run`
+- `publish.yml` —— 推 `v*` tag 时发布到 npm（带 `--provenance`）；也可以在 Actions 页手动运行，默认只做 dry run
+
+一次性配置：
+
+1. npm → Access Tokens 建 token：granular token 勾 **Read and write**（首次发布新包要能覆盖所有包），或 classic token 类型选 **Automation**（绕过 2FA）。
+2. GitHub 仓库 → Settings → Secrets and variables → Actions → **New repository secret**，名字 `NPM_TOKEN`，值粘贴上面的 token。
+
+之后每次发版：
+
+```bash
+npm version patch          # 或 minor / major：改 package.json 并打 vX.Y.Z tag
+git push --follow-tags     # CI 先校验 tag 与版本一致，再发布
+```
+
+`--provenance` 需要**公开仓库**（走 GitHub OIDC 签名）；私有仓库把那行去掉即可。
+
 ## 开发
 
 ```bash

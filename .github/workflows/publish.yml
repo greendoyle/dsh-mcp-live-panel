@@ -1,0 +1,74 @@
+name: Publish to npm
+
+# Two ways to run:
+#   - push a tag:  npm version patch && git push --follow-tags
+#   - manual:      Actions -> Publish to npm -> Run workflow (dry run by default)
+#
+# Requires the repository secret NPM_TOKEN: an npm access token with publish
+# rights for this package (granular token: "Read and write" on this package or
+# on all packages, with 2FA bypass; classic token: type "Automation").
+#
+# `--provenance` signs a public attestation through GitHub's OIDC identity, so it
+# needs a public repository and the id-token permission below. On a private
+# repository, drop the flag.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Only run "npm publish --dry-run"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Tag must match package.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match package.json version $version"
+            exit 1
+          fi
+
+      - name: Run the test suites
+        run: npm test
+
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
+        run: |
+          set -euo pipefail
+          package="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+          echo "publishing $package@$version (dry run: $DRY_RUN)"
+          if [ "$DRY_RUN" = "true" ]; then
+            npm publish --access public --dry-run
+          else
+            if npm view "$package@$version" version >/dev/null 2>&1; then
+              echo "::error::$package@$version is already published"
+              exit 1
+            fi
+            npm publish --access public --provenance
+          fi
