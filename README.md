@@ -1,167 +1,176 @@
-# dsh-mcp-live-panel
+<div align="center">
 
-给 **DeepSeek Harness (DSH)** 用的 MCP 服务面板：在 Web 界面里增删改 MCP 服务器、启用/停用、重连，**保存即生效** —— 不用改 `cordis.patch.yml`，也不用重启 Host。
+<img src="assets/icon.svg" width="88" height="88" alt="MCP Live Panel">
 
-![面板](docs/preview-list.png)
+# MCP Live Panel
 
-![编辑表单](docs/preview-editor.png)
+**MCP servers for DeepSeek Harness, managed from the browser.**
+Add, edit, enable, restart, remove — applied live, no config edits, no restart.
 
----
+[![CI](https://img.shields.io/github/actions/workflow/status/greendoyle/dsh-mcp-live-panel/ci.yml?branch=main&style=flat-square&label=ci)](https://github.com/greendoyle/dsh-mcp-live-panel/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/dsh-mcp-live-panel?style=flat-square&color=1d4f8c)](https://www.npmjs.com/package/dsh-mcp-live-panel)
+[![downloads](https://img.shields.io/npm/dm/dsh-mcp-live-panel?style=flat-square)](https://www.npmjs.com/package/dsh-mcp-live-panel)
+[![license](https://img.shields.io/npm/l/dsh-mcp-live-panel?style=flat-square)](LICENSE)
 
-## 它解决什么
+<sub>DSH 0.2.0.x · Node 22.19+ / 24.9+ · MIT</sub>
 
-DSH 把 MCP 服务器接进来自带一套 `@deepseek-ai/dsh-mcp-client`，但每个服务器都是配置里的一条 `insert` 行。于是：
+[English](README.md) · [简体中文](README.zh-CN.md)
 
-- 加一个服务器要记住 schema（`transport` / `command` / `args` / `env` / `url` / `headers`…），改错一个字段就很难查；
-- 命令写错（比如 `godot-mcp.exe` 装到了别处）时，客户端会按退避策略反复重试，控制台一直刷 `不是内部或外部命令`，界面上却什么都看不到；
-- 停掉一个服务器、换个参数，都要手改 YAML 再重启。
+</div>
 
-这个插件把这份配置搬进一个由界面管理的文件：**服务器列表 = 面板里的一张张卡片**，改动通过 Loader 热更新，正在跑的 Host 立刻按新配置连接或断开。
+<img src="docs/preview-list.png" alt="The MCP panel: server cards with status, tools and diagnostics" width="100%">
 
-## 安装
+## Why
 
-要求：DSH `0.2.0.x`、Node 22.19+ 或 24.9+、`pnpm` 在 `PATH` 里（DSH 的插件管理用 pnpm 装包）。
+DSH's MCP support (`@deepseek-ai/dsh-mcp-client`) is one `insert` row per server in `cordis.patch.yml`. That works — until it doesn't:
 
-**方式一：命令行**
+- ❌ **A typo is invisible.** Point `command` at a path that does not exist and the client retries with backoff: the console fills with `spawn ... ENOENT` while the GUI shows nothing at all.
+- ❌ **Every change is a restart.** Disable one server, change one env var, and you are back in YAML.
+- ❌ **The schema is easy to forget.** `transport`, `args`, `env`, `cwd`, `headers`, `reconnect`…
+
+This plugin turns that list into cards you can click. Underneath it is still the official `dsh-mcp-client`, so tool names (`mcp__<server>__<tool>`), behaviour and performance are unchanged.
+
+## Features
+
+| Feature | What it does |
+| --- | --- |
+| **Live CRUD** | Add, edit, rename, enable, disable, restart, delete. The Loader creates, updates or disposes exactly the affected `mcp-client` entries while the Host keeps running. |
+| **Real diagnostics** | Every save checks the command — bare names against `PATH` + `PATHEXT`, paths against the file itself — so a typo shows up instead of retrying silently. Failures show the underlying cause from the Host log, attributed per server. |
+| **Nothing to hand-edit** | The list lives in `<profile>/mcp-servers.json`, mounted by a `cordis:include` row this bundle declares itself. Installing it is the only configuration step. |
+| **Survives config reloads** | The list is a nested Loader tree, so editing your profile's `cordis.patch.yml` (DSH hot reload) never drops servers added from the panel. |
+| **Zero runtime dependencies** | The host half uses `node:fs` / `node:http` only. The page is three static files read per request, so UI edits need no Host restart. |
+| **Bilingual entry** | The Settings entry follows your language (en / zh). |
+
+## Quick start
 
 ```bash
+# DSH's plugin manager shells out to pnpm
+npm i -g pnpm
+
+# install the bundle into your web profile
 dsh plugin --profile web add dsh-mcp-live-panel
 ```
 
-**方式二：Web 界面**
+Or, in the GUI: **Plugins → Add plugin → `dsh-mcp-live-panel` → Install → Enable now**.
 
-侧边栏 **Plugins → 添加插件**，填包名 `dsh-mcp-live-panel` → **安装** → **立即启用**。
+Then open **Settings → MCP panel**, or go straight to <http://127.0.0.1:3080/mcp>.
 
-装好后打开 **设置 → MCP 面板**（或直接访问 <http://127.0.0.1:3080/mcp>）。
+> The first launch creates an empty `mcp-servers.json`. Nothing is spawned until you add a server.
 
-> 安装的是 DSH 的 **bundle** 包：它的 `cordis.patch.yml` 会自己插入需要的两行，**你不需要改任何本地配置**。
+## The panel
 
-## 用法
+<img src="docs/preview-editor.png" alt="Editing a server: transport-aware form" width="100%">
 
-| 操作 | 位置 | 效果 |
+| Action | Where | Effect |
 | --- | --- | --- |
-| 新增服务器 | 右上「＋ 新增服务器」 | 保存后立刻连接，工具以 `mcp__<名称>__<工具>` 注册 |
-| 编辑 / 改名 | 卡片「编辑」 | 按新配置重启该服务器 |
-| 启用 / 停用 | 卡片右侧开关 | 停用会断开进程并注销工具，不再重试 |
-| 重连 | 卡片「重连」 | 只重连，不改配置（适合卡住时） |
-| 删除 | 卡片「删除」 | 断开并把这条从列表移除 |
-| 手改文件后 | 顶部「重新读取」 | 按文件内容重载 |
+| **Add** | ＋ New server | Saves, then connects; tools register as `mcp__<name>__<tool>` |
+| **Edit / rename** | *Edit* on a card | Restarts that server with the new configuration |
+| **Enable / disable** | The switch | Disabling disconnects the process, unregisters its tools and stops the retries |
+| **Reconnect** | *Reconnect* | Dispose + connect again, keeping the configuration |
+| **Remove** | *Delete* | Disconnects and drops the row |
+| **Re-read** | *Reload* | Re-applies the file after you edit it by hand |
 
-表单支持两种传输：
+Two transports are supported, with the form adapting to the choice:
 
-- **stdio**：启动命令、参数（每行一个）、环境变量（`KEY=VALUE` 每行）、工作目录；
-- **streamable-http**：URL、请求头（`Key: Value` 每行）。
+- **stdio** — command, arguments (one per line), environment variables (`KEY=VALUE`), working directory;
+- **streamable-http** — URL and request headers (`Key: Value`).
 
-另外可设置工具调用超时、断线重连次数、是否启用；「连接失败时视为插件加载失败」一般不用开。
+Plus tool-call timeout, reconnect attempts, and an enabled flag. "Fail plugin activation on connection failure" exists for advanced use — leave it off.
 
-### 卡片上的诊断
+## How it works
 
-- **找不到可执行文件或命令**：保存前后都会检查 `command`（绝对路径查文件、裸命令查 `PATH` + `PATHEXT`）。写错的命令会当场标出来，而不是静默重试。
-- **最近一次报错**：Host 日志里 `mcp-client(<名称>):` 的记录按服务器归因，优先显示真正的失败原因（如 `spawn ... ENOENT`），而不是重试进度。
-- **外部配置**：仍然写在 `cordis.patch.yml` 里的 `dsh-mcp-client` 行会以只读卡片显示，提醒你迁进面板，避免同一个 `serverName` 被两处占用。
+```text
+<profile>/cordis.patch.yml            ← you never touch this
+├── mcp-servers   (cordis:include)    ← mounts the managed list
+└── mcp-panel                         ← this package: page + JSON API
 
-## 工作原理
-
-```
-<profile>/cordis.patch.yml          ← 不需要手改
-└── mcp-servers  (cordis:include)   ← 挂载下面这个文件
-└── mcp-panel                       ← 本插件：页面 + API
-
-<profile>/mcp-servers.json          ← 面板独占写入的 loader 条目列表
+<profile>/mcp-servers.json            ← owned by the panel
 └── { id, name: '@deepseek-ai/dsh-mcp-client', config, disabled? }
 ```
 
-面板每次改动都会：校验 → 原子写入 `mcp-servers.json` → 刷新 include 子树。Loader 自己 diff：新增条目连接、改动条目重启、删掉条目断开并注销工具。
+1. A panel write validates the row, atomically rewrites `mcp-servers.json`, then refreshes the include subtree.
+2. The Loader diffs that subtree: new rows connect, changed rows restart, removed rows disconnect and unregister their tools.
+3. Because the list is a **subtree** of the include, DSH's profile-config hot reload leaves it alone.
 
-因为服务器列表在 include 的**子树**里，改 profile 的 `cordis.patch.yml`（DSH 的配置热重载）不会把面板加的服务器冲掉。
+The browser half is one Settings section embedding the host page; its label is registered in both languages.
 
-## 配置（可选）
+## Configuration
 
-bundle patch 已给好默认值；需要时可以按 id 覆盖：
+The bundle patch ships sensible defaults. Override by entry id when you need to:
 
 ```yaml
 - id: mcp-panel
   config:
-    path: '/mcp'              # 页面与 API 的挂载路径
-    includeId: 'mcp-servers'  # 挂载列表的那一行
-    store: 'mcp-servers.json' # 相对 profile 目录，也接受绝对路径
+    path: '/mcp'              # page + API mount
+    includeId: 'mcp-servers'  # the include row that mounts the list
+    store: 'mcp-servers.json' # relative to the profile, or absolute
 ```
 
-> 如果 `/mcp` 已被别的插件占用，Loader 会因为路由重复让这一行加载失败；把 `path` 改成别的值（同时改 `lib/client.js` 里的 `PANEL_PATH`，或直接访问新路径）。
+If `/mcp` is already taken by another plugin, change `path` (and `PANEL_PATH` in `lib/client.js`, or navigate to the new path directly) — otherwise that row fails to load with a duplicate-route error.
 
-## 升级 / 卸载
+## Requirements
 
-- **升级**：DSH 的插件不会自动更新。`dsh plugin --profile web add dsh-mcp-live-panel@latest` 重新安装即可；面板里的服务器列表在 `mcp-servers.json`，升级不会丢。
-- **卸载**：Plugins 页移除该 bundle（或 `dsh plugin --profile web remove dsh-mcp-live-panel`）。`mcp-servers.json` 会留在 profile 里，重新安装即可恢复。
+- DSH **0.2.0.x** — enforced twice: `engines.dsh` and `peerDependencies`. DSH refuses an incompatible install instead of crashing after it.
+- Node **22.19+** or **24.9+**.
+- `pnpm` on `PATH` for `dsh plugin` and the Plugins page.
 
-### 如果你以前是手写配置的
+## Upgrade, remove, migrate
 
-把 `cordis.patch.yml` 里原来的 `mcp-godot` / `mcp-chrome-devtools` 之类 `dsh-mcp-client` 行删掉，再装本插件，然后在面板里重建这几条。两边同时存在会让同一个 `serverName` 冲突，也会让 `/mcp` 路由重复。
+<details>
+<summary>Click for the maintenance details</summary>
 
-## 安全说明
+- **Upgrade**: plugins do not update themselves. Run `dsh plugin --profile web add dsh-mcp-live-panel@latest`; your server list is untouched.
+- **Remove**: drop the bundle in the Plugins page, or run `dsh plugin --profile web remove dsh-mcp-live-panel`. `mcp-servers.json` stays in the profile and comes back if you reinstall.
+- **Migrating from hand-written rows**: delete the old `dsh-mcp-client` entries from your `cordis.patch.yml` first, then install and rebuild them in the panel. Two owners of the same `serverName` — or of `/mcp` — conflict.
 
-- 插件运行在 Host 进程内，**拥有你的用户权限**：它会 spawn 你填写的命令、读写 profile 目录下的 `mcp-servers.json`。只添加你信任的 MCP 服务器。
-- 页面与 API 只由 DSH 的 Web 服务器提供（默认 `127.0.0.1`），没有额外鉴权；不要把它暴露到公网。
-- 环境变量会以明文保存在 `mcp-servers.json` 里，别在里面放长期凭证（需要时用 MCP 服务器自己的配置/环境注入）。
+</details>
 
-## 兼容性
+## Security
 
-- DSH **0.2.0.x**（`engines.dsh` 与 `peerDependencies` 同时声明，DSH 安装时会按 peer 范围校验，不匹配会直接拒绝安装而不是装完再崩）。
-- 两个 peer 都标了 `optional`：它们只用于版本门禁，本插件不 `import` 任何 DSH 包，只通过 Cordis 服务取能力，所以不需要 pnpm 再把运行时包拉进 profile。
-- 没有自动更新：升级 = 重新安装新版本。
+- The host half runs **in-process with your user permissions**: it spawns the commands you configure and writes `<profile>/mcp-servers.json`. Only add servers you trust.
+- The page and its API are served by DSH's own Web server (loopback by default) with no extra authentication. Do not expose it.
+- Environment variables are stored in plain text in that JSON file. Keep long-lived secrets out of it.
 
-## 发布（维护者）
-
-流水线在 `.github/workflows/`：
-
-- `ci.yml` —— push / PR 跑 `npm test`（Node 22 与 24）和 `npm pack --dry-run`
-- `publish.yml` —— 推 `v*` tag 时发布到 npm（带 `--provenance`）；也可以在 Actions 页手动运行，默认只做 dry run
-
-一次性配置：
-
-1. npm → Access Tokens 建 token：granular token 勾 **Read and write**（首次发布新包要能覆盖所有包），或 classic token 类型选 **Automation**（绕过 2FA）。
-2. GitHub 仓库 → Settings → Secrets and variables → Actions → **New repository secret**，名字 `NPM_TOKEN`，值粘贴上面的 token。
-
-之后每次发版：
+## Development
 
 ```bash
-npm version patch          # 或 minor / major：改 package.json 并打 vX.Y.Z tag
-git push --follow-tags     # CI 先校验 tag 与版本一致，再发布
+npm test            # 55 host assertions + 21 browser-half assertions
+npm pack --dry-run  # inspect the published contents
 ```
 
-`--provenance` 需要**公开仓库**（走 GitHub OIDC 签名）；私有仓库把那行去掉即可。
+`test/panel-test.mjs` drives the real plugin through a fake Cordis context — page, state, CRUD, validation, log attribution. `test/client-test.mjs` drives the browser half through a fake module loader, slots and locale service.
 
-## 开发
+```text
+lib/index.js        host half: store, JSON API, assets, log attribution
+lib/client.js       browser half: the Settings section
+assets/             page HTML/CSS/JS, read from disk per request
+locale/             plugin card title/description (en, zh-CN)
+cordis.patch.yml    bundle layer: mcp-servers + mcp-panel rows
+test/               both suites, no running Host required
+```
+
+<details>
+<summary>Releasing (maintainers)</summary>
+
+`.github/workflows/ci.yml` runs both suites on Node 22 and 24 for every push and pull request.
+
+`.github/workflows/publish.yml` publishes from a `v*` tag with `--provenance`, after checking that the tag matches `package.json` and that the version is not on npm yet. A manual run is a dry run unless you unset `dry_run`.
+
+One-time setup: create an npm token (granular with **Read and write**, or a classic **Automation** token) and save it as the repository secret `NPM_TOKEN`.
 
 ```bash
-npm test                     # 宿主 55 项 + 浏览器半边 21 项断言
-npm pack --dry-run           # 检查发布内容
+npm version patch          # bump + tag vX.Y.Z
+git push --follow-tags     # CI publishes
 ```
 
-`test/panel-test.mjs` 用假的 Cordis 上下文驱动真实插件代码（页面、状态、增删改、校验、日志归因）；
-`test/client-test.mjs` 用假的模块加载器 / slots / locale 驱动浏览器半边。
+`--provenance` needs a **public** repository (GitHub OIDC). On a private one, drop the flag.
 
-仓库结构：
-
-```
-lib/index.js        宿主半边：store、HTTP API、资源服务、日志归因
-lib/client.js       浏览器半边：设置页里的「MCP 面板」
-assets/             页面 HTML/CSS/JS（每次请求读盘，改界面不用重启）
-locale/             插件卡片的中英文标题/描述
-cordis.patch.yml    bundle 层：插入 mcp-servers 与 mcp-panel 两行
-test/               两个不依赖运行中 Host 的测试
-```
-
-## English quickstart
-
-MCP server panel for DeepSeek Harness: add, edit, enable, restart and remove MCP servers from the Web GUI. Changes apply live — no config edits, no restart.
-
-```bash
-dsh plugin --profile web add dsh-mcp-live-panel
-```
-
-Then open **Settings → MCP panel** (or `http://127.0.0.1:3080/mcp`). Servers live in `<profile>/mcp-servers.json`, mounted by a `cordis:include` row that this bundle declares itself. Requires DSH 0.2.0.x and `pnpm` on `PATH`.
+</details>
 
 ## License
 
-MIT
+MIT © [GreenDoyle](https://github.com/greendoyle)
+
+---
+
+<sub>Not affiliated with DeepSeek. Built for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).</sub>

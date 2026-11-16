@@ -25,6 +25,7 @@
     "docs",
     "cordis.patch.yml",
     "README.md",
+    "README.zh-CN.md",
     "LICENSE"
   ],
   "icon": "assets/icon.svg",
