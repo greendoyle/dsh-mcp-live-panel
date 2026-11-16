@@ -1,0 +1,27 @@
+# Bundle layer for dsh-mcp-live-panel.
+#
+# Two rows only, inserted over whatever the profile already composes:
+#
+#   mcp-servers  a nested loader tree mounted from 'mcp-servers.json' in the
+#                active profile. `initial: []` creates that file on the first
+#                start, so the include mounts before the panel has written
+#                anything; afterwards the panel owns the file and rewrites it.
+#   mcp-panel    this package's host half: the /mcp page, its JSON API and the
+#                Loader/logger watchers that keep the list live.
+#
+# Users never edit this file. Their own profile cordis.patch.yml can still
+# override either row by id (for example a different `path` or `store`).
+
+- insert:
+    - id: mcp-servers
+      name: 'cordis:include'
+      config:
+        path: 'mcp-servers.json'
+        initial: []
+
+    - id: mcp-panel
+      name: 'dsh-mcp-live-panel'
+      config:
+        path: '/mcp'
+        includeId: 'mcp-servers'
+        store: 'mcp-servers.json'

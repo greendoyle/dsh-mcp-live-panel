@@ -1,0 +1,82 @@
+{
+  "name": "dsh-mcp-live-panel",
+  "version": "0.1.0",
+  "description": "Add, edit, enable, restart and remove MCP servers from the DeepSeek Harness Web GUI — applied live, no config edits, no restart.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/greendoyle/dsh-mcp-live-panel.git"
+  },
+  "homepage": "https://github.com/greendoyle/dsh-mcp-live-panel#readme",
+  "bugs": {
+    "url": "https://github.com/greendoyle/dsh-mcp-live-panel/issues"
+  },
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "assets",
+    "locale",
+    "docs",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "icon": "assets/icon.svg",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "deepseek",
+    "cordis",
+    "mcp",
+    "mcp-client",
+    "mcp-panel",
+    "panel",
+    "settings",
+    "live"
+  ],
+  "license": "MIT",
+  "author": "GreenDoyle",
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "dsh": ">=0.2.0-0 <0.3.0",
+    "node": "^22.19.0 || >=24.9.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-host-webserver": ">=0.2.0-0 <0.3.0",
+    "@deepseek-ai/dsh-tools": ">=0.2.0-0 <0.3.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-host-webserver": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    }
+  },
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ],
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "test": "node test/panel-test.mjs && node test/client-test.mjs",
+    "pack:dry": "npm pack --dry-run"
+  }
+}
